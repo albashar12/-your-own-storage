@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="max-w-md mx-auto bg-slate-800/60 p-8 rounded-2xl border border-slate-700 shadow-xl backdrop-blur">
+    <h2 class="text-2xl font-bold mb-2 text-center text-white">Password Recovery</h2>
+    <p class="text-slate-400 text-xs text-center mb-6">Answer your security question to restore access.</p>
+
+    {% if not user %}
+    <form action="{{ url_for('reset_password') }}" method="POST" class="space-y-4">
+        <input type="hidden" name="step" value="find">
+        <div>
+            <label class="block text-xs font-semibold text-slate-300 uppercase mb-2">Enter Username</label>
+            <input type="text" name="username" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-emerald-500">
+        </div>
+        <button type="submit" class="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-3 rounded-lg transition">
+            Continue
+        </button>
+    </form>
+    {% else %}
+    <form action="{{ url_for('reset_password') }}" method="POST" class="space-y-4">
+        <input type="hidden" name="step" value="reset">
+        <input type="hidden" name="username" value="{{ user.username }}">
+        
+        <div class="bg-slate-900/50 p-3 rounded-lg border border-slate-700 text-sm">
+            <span class="text-xs text-slate-400 block">Security Question:</span>
+            <span class="font-medium text-emerald-400">{{ user.sec_question }}</span>
+        </div>
+        
+        <div>
+            <label class="block text-xs font-semibold text-slate-300 uppercase mb-2">Your Answer</label>
+            <input type="text" name="sec_answer" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-emerald-500">
+        </div>
+        <div>
+            <label class="block text-xs font-semibold text-slate-300 uppercase mb-2">New Password</label>
+            <input type="password" name="new_password" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-emerald-500">
+        </div>
+        <button type="submit" class="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-3 rounded-lg transition">
+            Update Password
+        </button>
+    </form>
+    {% endif %}
+</div>
+{% endblock %}
