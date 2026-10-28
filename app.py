@@ -189,6 +189,7 @@ def dashboard():
             return redirect(url_for('dashboard'))
             
         filename = file.filename
+        mime_type = file.mimetype  # ফাইলের সঠিক MIME type ক্যাপচার করা হলো
         file_bytes = file.read()
         file_size = len(file_bytes)
         
@@ -196,8 +197,8 @@ def dashboard():
         
         with get_db() as conn:
             conn.execute(
-                'INSERT INTO stored_files (user_id, filename, file_id, file_size) VALUES (?, ?, ?, ?)',
-                (user_id, filename, str(message_id), file_size)
+                'INSERT INTO stored_files (user_id, filename, file_id, mime_type, file_size) VALUES (?, ?, ?, ?, ?)',
+                (user_id, filename, str(message_id), mime_type, file_size)
             )
             conn.commit()
             
@@ -208,6 +209,22 @@ def dashboard():
         files = conn.execute('SELECT * FROM stored_files WHERE user_id = ? ORDER BY id DESC', (user_id,)).fetchall()
         
     return render_template('dashboard.html', files=files)
+
+@app.route('/view/<int:file_id>')
+def view_file(file_id):
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+        
+    with get_db() as conn:
+        file_rec = conn.execute('SELECT * FROM stored_files WHERE id = ? AND user_id = ?', (file_id, session['user_id'])).fetchone()
+        
+    if not file_rec:
+        flash("File not found.", "error")
+        return redirect(url_for('dashboard'))
+        
+    buffer = run_async(download_from_storage(int(file_rec['file_id'])))
+    # as_attachment=False দেওয়ার কারণে ব্রাউজার ফাইল ডাউনলোড না করে সরাসরি প্রিভিউ বা ওপেন করবে
+    return send_file(buffer, mimetype=file_rec['mime_type'] or 'application/octet-stream', download_name=file_rec['filename'])
 
 @app.route('/download/<int:file_id>')
 def download(file_id):
@@ -227,7 +244,7 @@ def download(file_id):
 # Admin Dashboard (Accessed directly after Admin login)
 @app.route('/admin-vault')
 def admin_panel():
-    if 'user_id' not in session or session.get('is_admin') != 1:
+    if 'user_id' not in session or session.get('is_admin'] != 1:
         flash("Unauthorized access.", "error")
         return redirect(url_for('dashboard'))
         
