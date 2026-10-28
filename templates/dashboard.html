@@ -73,11 +73,12 @@
         </div>
     </div>
 
-    <!-- Upload Section -->
+    <!-- Upload Section with Multiple Files Support -->
     <div class="upload-box">
-        <h3>Upload Original Files</h3>
+        <h3>Upload Original Files (Multiple supported)</h3>
         <form action="{{ url_for('dashboard') }}" method="POST" enctype="multipart/form-data">
-            <input type="file" name="file" required style="margin-bottom: 10px; display: block; color: white;">
+            <!-- multiple attribute added here -->
+            <input type="file" name="file" multiple required style="margin-bottom: 10px; display: block; color: white;">
             <button type="submit" class="btn" style="background: #6366f1;">Upload to Vault</button>
         </form>
     </div>
