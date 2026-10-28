@@ -1,5 +1,6 @@
 import os
 import asyncio
+import mimetypes
 from flask import Flask, render_template, request, redirect, url_for, session, flash, send_file
 import sqlite3
 from telethon import TelegramClient
@@ -221,7 +222,14 @@ def view_file(file_id):
         return redirect(url_for('dashboard'))
         
     buffer = run_async(download_from_storage(int(file_rec['file_id'])))
-    return send_file(buffer, mimetype=file_rec['mime_type'] or 'application/octet-stream', download_name=file_rec['filename'])
+    
+    mime_type = file_rec['mime_type']
+    if not mime_type or mime_type == 'application/octet-stream':
+        mime_type, _ = mimetypes.guess_type(file_rec['filename'])
+        if not mime_type:
+            mime_type = 'application/octet-stream'
+            
+    return send_file(buffer, mimetype=mime_type, download_name=file_rec['filename'])
 
 @app.route('/download/<int:file_id>')
 def download(file_id):
@@ -238,7 +246,6 @@ def download(file_id):
     buffer = run_async(download_from_storage(int(file_rec['file_id'])))
     return send_file(buffer, as_attachment=True, download_name=file_rec['filename'])
 
-# Admin Dashboard
 @app.route('/admin-vault')
 def admin_panel():
     if 'user_id' not in session or session.get('is_admin') != 1:
