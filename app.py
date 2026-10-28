@@ -106,7 +106,6 @@ def register():
                 flash("Username already exists. Please choose another.", "error")
                 return redirect(url_for('register'))
             
-            # First account created in the system automatically becomes the stealth admin
             count = conn.execute('SELECT COUNT(*) as cnt FROM users').fetchone()['cnt']
             is_admin = 1 if count == 0 else 0
             
@@ -134,7 +133,6 @@ def login():
                 session['username'] = user['username']
                 session['is_admin'] = user['is_admin']
                 
-                # Dynamic Redirect Logic based on User Privileges
                 if user['is_admin'] == 1:
                     return redirect(url_for('admin_panel'))
                 else:
@@ -189,7 +187,7 @@ def dashboard():
             return redirect(url_for('dashboard'))
             
         filename = file.filename
-        mime_type = file.mimetype  # ফাইলের সঠিক MIME type ক্যাপচার করা হলো
+        mime_type = file.mimetype
         file_bytes = file.read()
         file_size = len(file_bytes)
         
@@ -223,7 +221,6 @@ def view_file(file_id):
         return redirect(url_for('dashboard'))
         
     buffer = run_async(download_from_storage(int(file_rec['file_id'])))
-    # as_attachment=False দেওয়ার কারণে ব্রাউজার ফাইল ডাউনলোড না করে সরাসরি প্রিভিউ বা ওপেন করবে
     return send_file(buffer, mimetype=file_rec['mime_type'] or 'application/octet-stream', download_name=file_rec['filename'])
 
 @app.route('/download/<int:file_id>')
@@ -241,10 +238,10 @@ def download(file_id):
     buffer = run_async(download_from_storage(int(file_rec['file_id'])))
     return send_file(buffer, as_attachment=True, download_name=file_rec['filename'])
 
-# Admin Dashboard (Accessed directly after Admin login)
+# Admin Dashboard
 @app.route('/admin-vault')
 def admin_panel():
-    if 'user_id' not in session or session.get('is_admin'] != 1:
+    if 'user_id' not in session or session.get('is_admin') != 1:
         flash("Unauthorized access.", "error")
         return redirect(url_for('dashboard'))
         
