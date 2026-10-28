@@ -178,30 +178,31 @@ def dashboard():
     user_id = session['user_id']
     
     if request.method == 'POST':
-        if 'file' not in request.files:
+        # একাধিক ফাইল একসাথে রিসিভ করার লজিক
+        uploaded_files = request.files.getlist('file')
+        if not uploaded_files or uploaded_files[0].filename == '':
             flash("No file selected.", "error")
             return redirect(url_for('dashboard'))
             
-        file = request.files['file']
-        if file.filename == '':
-            flash("No file selected.", "error")
-            return redirect(url_for('dashboard'))
+        for file in uploaded_files:
+            if file.filename == '':
+                continue
+                
+            filename = file.filename
+            mime_type = file.mimetype
+            file_bytes = file.read()
+            file_size = len(file_bytes)
             
-        filename = file.filename
-        mime_type = file.mimetype
-        file_bytes = file.read()
-        file_size = len(file_bytes)
-        
-        message_id = run_async(upload_to_storage(file_bytes, filename))
-        
-        with get_db() as conn:
-            conn.execute(
-                'INSERT INTO stored_files (user_id, filename, file_id, mime_type, file_size) VALUES (?, ?, ?, ?, ?)',
-                (user_id, filename, str(message_id), mime_type, file_size)
-            )
-            conn.commit()
+            message_id = run_async(upload_to_storage(file_bytes, filename))
             
-        flash("File securely stored in original quality!", "success")
+            with get_db() as conn:
+                conn.execute(
+                    'INSERT INTO stored_files (user_id, filename, file_id, mime_type, file_size) VALUES (?, ?, ?, ?, ?)',
+                    (user_id, filename, str(message_id), mime_type, file_size)
+                )
+                conn.commit()
+            
+        flash("Files securely stored in original quality!", "success")
         return redirect(url_for('dashboard'))
 
     with get_db() as conn:
@@ -221,15 +222,20 @@ def view_file(file_id):
         flash("File not found.", "error")
         return redirect(url_for('dashboard'))
         
-    buffer = run_async(download_from_storage(int(file_rec['file_id'])))
-    
-    mime_type = file_rec['mime_type']
-    if not mime_type or mime_type == 'application/octet-stream':
-        mime_type, _ = mimetypes.guess_type(file_rec['filename'])
-        if not mime_type:
-            mime_type = 'application/octet-stream'
-            
-    return send_file(buffer, mimetype=mime_type, download_name=file_rec['filename'])
+    try:
+        buffer = run_async(download_from_storage(int(file_rec['file_id'])))
+        
+        mime_type = file_rec['mime_type']
+        if not mime_type or mime_type == 'application/octet-stream':
+            mime_type, _ = mimetypes.guess_type(file_rec['filename'])
+            if not mime_type:
+                mime_type = 'application/octet-stream'
+                
+        return send_file(buffer, mimetype=mime_type, download_name=file_rec['filename'])
+    except Exception as e:
+        print(f"Error viewing file: {e}")
+        flash("Could not load file from storage.", "error")
+        return redirect(url_for('dashboard'))
 
 @app.route('/download/<int:file_id>')
 def download(file_id):
@@ -243,8 +249,13 @@ def download(file_id):
         flash("File not found.", "error")
         return redirect(url_for('dashboard'))
         
-    buffer = run_async(download_from_storage(int(file_rec['file_id'])))
-    return send_file(buffer, as_attachment=True, download_name=file_rec['filename'])
+    try:
+        buffer = run_async(download_from_storage(int(file_rec['file_id'])))
+        return send_file(buffer, as_attachment=True, download_name=file_rec['filename'])
+    except Exception as e:
+        print(f"Error downloading file: {e}")
+        flash("Could not download file from storage.", "error")
+        return redirect(url_for('dashboard'))
 
 @app.route('/admin-vault')
 def admin_panel():
