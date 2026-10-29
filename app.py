@@ -1,17 +1,14 @@
 import os
-import asyncio
 import mimetypes
+import requests
 from flask import Flask, render_template, request, redirect, url_for, session, flash, send_file
 import sqlite3
-from telethon import TelegramClient
 from io import BytesIO
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "your_own_vault_secret_key_999")
 
-# Environment Variables for Storage Engine
-API_ID = os.environ.get("API_ID")
-API_HASH = os.environ.get("API_HASH")
+# Telegram Bot API Credentials (No API_ID or API_HASH needed anymore!)
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHANNEL_ID = os.environ.get("CHANNEL_ID")
 
@@ -53,36 +50,39 @@ def init_db():
 
 init_db()
 
-# Async Storage Helpers
-def run_async(coro):
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+# Telegram HTTP API Storage Helpers (Stateless & Fast)
+def upload_to_storage(file_bytes, filename):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendDocument"
+    files = {'document': (filename, file_bytes)}
+    data = {'chat_id': CHANNEL_ID}
+    
     try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
+        response = requests.post(url, data=data, files=files)
+        if response.status_code == 200:
+            res_json = response.json()
+            # টেলিগ্রাম থেকে ফাইলের ইউনিক telegram file_id রিটার্ন করা হচ্ছে
+            doc_file_id = res_json['result']['document']['file_id']
+            return doc_file_id
+    except Exception as e:
+        print(f"Upload error: {e}")
+    return None
 
-async def upload_to_storage(file_bytes, filename):
-    client = TelegramClient('bot_session', int(API_ID), API_HASH)
-    await client.start(bot_token=BOT_TOKEN)
-    # force_document=True ensures 100% original lossless raw file storage
-    message = await client.send_file(
-        CHANNEL_ID,
-        file_bytes,
-        caption=filename,
-        force_document=True
-    )
-    await client.disconnect()
-    return message.id
-
-async def download_from_storage(message_id):
-    client = TelegramClient('bot_session', int(API_ID), API_HASH)
-    await client.start(bot_token=BOT_TOKEN)
-    buffer = BytesIO()
-    await client.download_media(message_id, buffer)
-    await client.disconnect()
-    buffer.seek(0)
-    return buffer
+def download_from_storage(file_id):
+    try:
+        # ১. টেলিগ্রাম থেকে ফাইলের সার্ভার পাথ ফেচ করা
+        get_file_url = f"https://api.telegram.org/bot{BOT_TOKEN}/getFile?file_id={file_id}"
+        res = requests.get(get_file_url).json()
+        
+        if res.get('ok'):
+            file_path = res['result']['file_path']
+            # ২. টেলিগ্রাম সার্ভার থেকে ফাইল বাইট ডাউনলোড করা
+            download_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}"
+            file_res = requests.get(download_url)
+            return BytesIO(file_res.content)
+    except Exception as e:
+        print(f"Download error: {e}")
+        
+    return BytesIO()
 
 # Routes
 
@@ -193,16 +193,17 @@ def dashboard():
             file_bytes = file.read()
             file_size = len(file_bytes)
             
-            message_id = run_async(upload_to_storage(file_bytes, filename))
+            telegram_file_id = upload_to_storage(file_bytes, filename)
             
-            with get_db() as conn:
-                conn.execute(
-                    'INSERT INTO stored_files (user_id, filename, file_id, mime_type, file_size) VALUES (?, ?, ?, ?, ?)',
-                    (user_id, filename, str(message_id), mime_type, file_size)
-                )
-                conn.commit()
+            if telegram_file_id:
+                with get_db() as conn:
+                    conn.execute(
+                        'INSERT INTO stored_files (user_id, filename, file_id, mime_type, file_size) VALUES (?, ?, ?, ?, ?)',
+                        (user_id, filename, telegram_file_id, mime_type, file_size)
+                    )
+                    conn.commit()
             
-        flash("Files securely stored in original lossless quality!", "success")
+        flash("Files successfully stored via Bot API!", "success")
         return redirect(url_for('dashboard'))
 
     with get_db() as conn:
@@ -223,7 +224,7 @@ def view_file(file_id):
         return redirect(url_for('dashboard'))
         
     try:
-        buffer = run_async(download_from_storage(int(file_rec['file_id'])))
+        buffer = download_from_storage(file_rec['file_id'])
         
         mime_type = file_rec['mime_type']
         if not mime_type or mime_type == 'application/octet-stream':
@@ -250,7 +251,7 @@ def download(file_id):
         return redirect(url_for('dashboard'))
         
     try:
-        buffer = run_async(download_from_storage(int(file_rec['file_id'])))
+        buffer = download_from_storage(file_rec['file_id'])
         return send_file(buffer, as_attachment=True, download_name=file_rec['filename'])
     except Exception as e:
         print(f"Error downloading file: {e}")
