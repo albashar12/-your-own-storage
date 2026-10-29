@@ -17,6 +17,11 @@
         input[type="file"] { color: #cbd5e1; padding: 10px; background: rgba(15, 23, 42, 0.6); border: 1px dashed rgba(56, 189, 248, 0.4); border-radius: 8px; width: 100%; cursor: pointer; }
         button[type="submit"] { background: linear-gradient(135deg, #0284c7, #4f46e5); color: white; border: none; padding: 12px 30px; font-size: 16px; font-weight: 600; border-radius: 8px; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 0 20px rgba(56, 189, 248, 0.3); }
         button[type="submit"]:hover { transform: translateY(-2px); box-shadow: 0 0 25px rgba(99, 102, 241, 0.6); }
+        
+        /* Progress Bar Styles */
+        .progress-container { display: none; margin-top: 20px; width: 100%; background: rgba(15, 23, 42, 0.8); border-radius: 8px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .progress-bar { width: 0%; height: 22px; background: linear-gradient(90deg, #0284c7, #38bdf8); text-align: center; color: white; font-size: 12px; font-weight: 600; line-height: 22px; transition: width 0.2s ease; }
+        
         .files-section h3 { margin-bottom: 15px; font-size: 20px; color: #e2e8f0; }
         .file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 15px; }
         .file-card { background: rgba(255, 255, 255, 0.02); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.06); padding: 18px; border-radius: 12px; display: flex; flex-direction: column; justify-content: space-between; transition: all 0.3s ease; }
@@ -35,13 +40,18 @@
             <a href="/logout" class="logout-btn">Logout</a>
         </header>
         <div class="upload-card">
-            <form action="/dashboard" method="POST" enctype="multipart/form-data">
+            <form id="uploadForm" action="/dashboard" method="POST" enctype="multipart/form-data">
                 <div class="file-input-wrapper">
-                    <input type="file" name="file" multiple required>
+                    <input type="file" name="file" id="fileInput" multiple required>
                 </div>
-                <button type="submit">Upload Files</button>
+                <button type="submit" id="uploadBtn">Upload Files</button>
             </form>
+            
+            <div class="progress-container" id="progressContainer">
+                <div class="progress-bar" id="progressBar">0%</div>
+            </div>
         </div>
+        
         <div class="files-section">
             <h3>📂 Stored Files</h3>
             <div class="file-grid">
@@ -61,5 +71,55 @@
             </div>
         </div>
     </div>
+
+    <script>
+        const form = document.getElementById('uploadForm');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressBar = document.getElementById('progressBar');
+        const uploadBtn = document.getElementById('uploadBtn');
+
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const fileInput = document.getElementById('fileInput');
+            if (fileInput.files.length === 0) return;
+
+            const formData = new FormData(form);
+            const xhr = new XMLHttpRequest();
+
+            xhr.open('POST', '/dashboard', true);
+
+            xhr.upload.addEventListener('progress', function(e) {
+                if (e.lengthComputable) {
+                    const percentComplete = Math.round((e.loaded / e.total) * 100);
+                    progressContainer.style.display = 'block';
+                    progressBar.style.width = percentComplete + '%';
+                    progressBar.innerHTML = percentComplete + '% Uploading...';
+                    uploadBtn.disabled = true;
+                    uploadBtn.style.opacity = '0.6';
+                }
+            });
+
+            xhr.onload = function() {
+                if (xhr.status === 200) {
+                    progressBar.innerHTML = 'Upload Complete!';
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 500);
+                } else {
+                    alert('Upload failed. Please try again.');
+                    uploadBtn.disabled = false;
+                    uploadBtn.style.opacity = '1';
+                }
+            };
+
+            xhr.onerror = function() {
+                alert('An error occurred during upload.');
+                uploadBtn.disabled = false;
+                uploadBtn.style.opacity = '1';
+            };
+
+            xhr.send(formData);
+        });
+    </script>
 </body>
 </html>
