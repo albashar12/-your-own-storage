@@ -131,6 +131,10 @@ def login():
         return "Invalid credentials!"
     return render_template('login.html')
 
+@app.route('/reset_password')
+def reset_password():
+    return "Password reset feature is coming soon! <a href='/login'>Back to Login</a>"
+
 @app.route('/dashboard', methods=['GET', 'POST'])
 def dashboard():
     if 'user_id' not in session:
