@@ -65,11 +65,12 @@ def run_async(coro):
 async def upload_to_storage(file_bytes, filename):
     client = TelegramClient('bot_session', int(API_ID), API_HASH)
     await client.start(bot_token=BOT_TOKEN)
+    # force_document=True ensures 100% original lossless raw file storage
     message = await client.send_file(
         CHANNEL_ID,
         file_bytes,
         caption=filename,
-        force_document=True  # 100% original quality loss-less storage
+        force_document=True
     )
     await client.disconnect()
     return message.id
@@ -178,7 +179,6 @@ def dashboard():
     user_id = session['user_id']
     
     if request.method == 'POST':
-        # একাধিক ফাইল একসাথে রিসিভ করার লজিক
         uploaded_files = request.files.getlist('file')
         if not uploaded_files or uploaded_files[0].filename == '':
             flash("No file selected.", "error")
@@ -202,7 +202,7 @@ def dashboard():
                 )
                 conn.commit()
             
-        flash("Files securely stored in original quality!", "success")
+        flash("Files securely stored in original lossless quality!", "success")
         return redirect(url_for('dashboard'))
 
     with get_db() as conn:
