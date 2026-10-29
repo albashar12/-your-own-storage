@@ -69,7 +69,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL
+            password TEXT NOT NULL,
+            is_admin INTEGER DEFAULT 0
         )
     ''')
     cursor.execute('''
@@ -82,6 +83,13 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users (id)
         )
     ''')
+    
+    # Create default admin account if not exists
+    cursor.execute("SELECT id FROM users WHERE username = 'admin'")
+    if not cursor.fetchone():
+        admin_pass = generate_password_hash("admin123")
+        cursor.execute("INSERT INTO users (username, password, is_admin) VALUES (?, ?, ?)", ("admin", admin_pass, 1))
+    
     conn.commit()
     conn.close()
 
@@ -91,6 +99,8 @@ init_db()
 @app.route('/')
 def index():
     if 'user_id' in session:
+        if session.get('is_admin'):
+            return redirect(url_for('admin_panel'))
         return redirect(url_for('dashboard'))
     return redirect(url_for('login'))
 
@@ -103,7 +113,7 @@ def register():
         try:
             conn = sqlite3.connect(DB_NAME)
             cursor = conn.cursor()
-            cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, password))
+            cursor.execute("INSERT INTO users (username, password, is_admin) VALUES (?, ?, 0)", (username, password))
             conn.commit()
             conn.close()
             backup_db_to_telegram()
@@ -120,13 +130,17 @@ def login():
         
         conn = sqlite3.connect(DB_NAME)
         cursor = conn.cursor()
-        cursor.execute("SELECT id, password FROM users WHERE username = ?", (username,))
+        cursor.execute("SELECT id, password, is_admin FROM users WHERE username = ?", (username,))
         user = cursor.fetchone()
         conn.close()
         
         if user and check_password_hash(user[1], password):
             session['user_id'] = user[0]
             session['username'] = username
+            session['is_admin'] = user[2]
+            
+            if user[2] == 1:
+                return redirect(url_for('admin_panel'))
             return redirect(url_for('dashboard'))
         return "Invalid credentials!"
     return render_template('login.html')
@@ -135,10 +149,50 @@ def login():
 def reset_password():
     return "Password reset feature is coming soon! <a href='/login'>Back to Login</a>"
 
+@app.route('/admin')
+def admin_panel():
+    if 'user_id' not in session or not session.get('is_admin'):
+        return redirect(url_for('login'))
+    
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    
+    # Fetch all users
+    cursor.execute("SELECT id, username, is_admin FROM users")
+    users = [{'id': row[0], 'username': row[1], 'is_admin': row[2]} for row in cursor.fetchall()]
+    
+    # Fetch all files with uploader username
+    cursor.execute("""
+        SELECT files.id, users.username, files.filename, files.mime_type 
+        FROM files JOIN users ON files.user_id = users.id
+    """)
+    files = [{'id': row[0], 'username': row[1], 'filename': row[2], 'mime_type': row[3]} for row in cursor.fetchall()]
+    
+    conn.close()
+    
+    return render_template('admin.html', users=users, files=files)
+
+@app.route('/admin/delete_user/<int:user_id>')
+def delete_user(user_id):
+    if 'user_id' not in session or not session.get('is_admin'):
+        return redirect(url_for('login'))
+    
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM users WHERE id = ? AND is_admin = 0", (user_id,))
+    cursor.execute("DELETE FROM files WHERE user_id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+    backup_db_to_telegram()
+    return redirect(url_for('admin_panel'))
+
 @app.route('/dashboard', methods=['GET', 'POST'])
 def dashboard():
     if 'user_id' not in session:
         return redirect(url_for('login'))
+    
+    if session.get('is_admin'):
+        return redirect(url_for('admin_panel'))
     
     user_id = session['user_id']
     
@@ -182,7 +236,10 @@ def view_file(file_id):
     
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    cursor.execute("SELECT telegram_file_id, filename, mime_type FROM files WHERE id = ? AND user_id = ?", (file_id, session['user_id']))
+    if session.get('is_admin'):
+        cursor.execute("SELECT telegram_file_id, filename, mime_type FROM files WHERE id = ?", (file_id,))
+    else:
+        cursor.execute("SELECT telegram_file_id, filename, mime_type FROM files WHERE id = ? AND user_id = ?", (file_id, session['user_id']))
     file_data = cursor.fetchone()
     conn.close()
     
