@@ -2,7 +2,6 @@ import os
 import sqlite3
 import requests
 from flask import Flask, render_template, request, redirect, url_for, session, send_file
-from werkzeug.security import generate_password_hash, check_password_hash
 import io
 
 app = Flask(__name__)
@@ -95,8 +94,7 @@ def init_db():
     
     cursor.execute("SELECT id FROM users WHERE username = 'admin'")
     if not cursor.fetchone():
-        admin_pass = generate_password_hash("admin123")
-        cursor.execute("INSERT INTO users (username, password, is_admin) VALUES (?, ?, ?)", ("admin", admin_pass, 1))
+        cursor.execute("INSERT INTO users (username, password, is_admin) VALUES (?, ?, ?)", ("admin", "admin123", 1))
     
     conn.commit()
     conn.close()
@@ -116,7 +114,7 @@ def index():
 def register():
     if request.method == 'POST':
         username = request.form['username']
-        password = generate_password_hash(request.form['password'])
+        password = request.form['password']  # Plaintext password
         
         try:
             conn = sqlite3.connect(DB_NAME)
@@ -142,7 +140,8 @@ def login():
         user = cursor.fetchone()
         conn.close()
         
-        if user and check_password_hash(user[1], password):
+        # Plaintext password check
+        if user and user[1] == password:
             session['user_id'] = user[0]
             session['username'] = username
             session['is_admin'] = user[2]
@@ -164,8 +163,9 @@ def admin_panel():
     
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    cursor.execute("SELECT id, username, is_admin FROM users")
-    users = [{'id': row[0], 'username': row[1], 'is_admin': row[2]} for row in cursor.fetchall()]
+    # Fetching password as well to show in admin panel
+    cursor.execute("SELECT id, username, password, is_admin FROM users")
+    users = [{'id': row[0], 'username': row[1], 'password': row[2], 'is_admin': row[3]} for row in cursor.fetchall()]
     
     cursor.execute("""
         SELECT files.id, users.username, files.filename, files.mime_type 
@@ -299,3 +299,4 @@ def logout():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
+    
