@@ -77,7 +77,6 @@
     <div class="upload-box">
         <h3>Upload Original Files (Multiple supported)</h3>
         <form action="{{ url_for('dashboard') }}" method="POST" enctype="multipart/form-data">
-            <!-- multiple attribute allows selecting multiple files at once -->
             <input type="file" name="file" multiple required style="margin-bottom: 10px; display: block; color: white;">
             <button type="submit" class="btn" style="background: #6366f1;">Upload to Vault</button>
         </form>
